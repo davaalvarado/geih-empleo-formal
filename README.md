@@ -1,7 +1,6 @@
 # geih-empleo-formal
 
-**Evaluación de impacto de la Jornada Única Escolar (JUE) sobre el empleo de las madres en Colombia.**
-Diseño de diferencias en diferencias escalonado (*staggered DiD*) con el estimador de Callaway-Sant'Anna, implementado en R.
+**Evaluación de impacto de la Jornada Única Escolar (JUE) sobre el empleo de las madres en Colombia.** Diseño de diferencias en diferencias escalonado (*staggered DiD*) con el estimador de Callaway-Sant'Anna, implementado en R.
 
 > El repositorio se llama `geih-empleo-formal` porque la **GEIH** del DANE es la fuente de las variables de resultado del estudio: participación laboral, informalidad, horas trabajadas e ingresos de las madres.
 
@@ -21,16 +20,18 @@ La literatura existente sobre la JUE se ha concentrado casi por completo en el r
 
 ## Datos
 
-| Fuente | Entidad | Qué aporta al estudio | Acceso |
+| Fuente | Entidad | Qué aporta al estudio | Dónde se descarga |
 |---|---|---|---|
-| **SIMAT** | Ministerio de Educación | **Tratamiento:** matrícula por sede, municipio, año y jornada. Permite calcular qué proporción de la matrícula oficial de cada municipio está en jornada única | Datos abiertos MEN |
-| **GEIH** | DANE | **Resultados:** participación laboral, formalidad/informalidad, horas trabajadas, ingresos y composición del hogar. Mensual | Microdatos públicos |
-| **ENUT** | DANE | **Mecanismo:** horas de trabajo no remunerado y cuidado de menores. Solo cuatro levantamientos (2012–13, 2016–17, 2020–21, 2024–25) | Público |
-| **C600** | Ministerio de Educación | Características de los establecimientos educativos | Datos abiertos MEN |
+| **Educación Formal** | DANE (origen: SIMAT del MEN) | **Tratamiento:** matrícula por sede, municipio, año y jornada. Permite calcular qué proporción de la matrícula oficial de cada municipio está en jornada única | `microdatos.dane.gov.co` → EDU-MICRODATOS → "Educación Formal", un catálogo por año |
+| **GEIH** | DANE | **Resultados:** participación laboral, formalidad/informalidad, horas trabajadas, ingresos y composición del hogar. Mensual | `microdatos.dane.gov.co` |
+| **ENUT** | DANE | **Mecanismo:** horas de trabajo no remunerado y cuidado de menores. Solo cuatro levantamientos (2012–13, 2016–17, 2020–21, 2024–25) | `microdatos.dane.gov.co` |
+| **C600 / Educación Formal** | DANE–MEN | Características de los establecimientos educativos | `microdatos.dane.gov.co` |
+
+**Sobre la fuente del tratamiento.** El SIMAT es el sistema de matrícula del Ministerio de Educación, pero los datos que consume este proyecto llegan por la operación estadística **Educación Formal del DANE**, que publica la matrícula **ya agregada por sede y jornada** en lugar de registro por estudiante. Para calcular cobertura municipal esa presentación es más liviana y directa. Cada año tiene su propio catálogo en el portal (por ejemplo, 2018 corresponde al catálogo 615 y 2023 al 834).
 
 **Período de análisis:** 2012–2023. Los años 2012–2014 son período pre-tratamiento limpio (la JUE no existía) y sirven para verificar tendencias paralelas; 2015 es el año de la Ley 1753 que crea la política; de ahí en adelante se mide la expansión y sus efectos.
 
-Los microdatos **no se versionan en este repositorio** (son archivos pesados del DANE y el MEN). El `.gitignore` los excluye junto con los archivos temporales de RStudio. Hay que descargarlos por separado desde las fuentes citadas.
+Los microdatos **no se versionan en este repositorio** (son archivos pesados y públicos). El `.gitignore` excluye `datos/` y `salidas/` junto con los archivos temporales de RStudio.
 
 ---
 
@@ -52,7 +53,7 @@ El DiD tradicional de efectos fijos de dos vías (TWFE) está sesgado en diseño
 
 - **Nivel de tratamiento:** municipio (con agregación alternativa a departamento).
 - **Unidad de análisis de los resultados:** mujeres de 18 a 55 años con al menos un hijo de 6 a 17 años en el hogar, identificadas en la GEIH mediante la variable de parentesco.
-- **Variable de tratamiento:** porcentaje de matrícula oficial en jornada única por municipio y año (`cobertura_ju`).
+- **Variable de tratamiento:** porcentaje de matrícula oficial en jornada única por municipio y año (`cobertura_ju`). La jornada única se identifica por el **código 6** en la variable de jornada.
 - **Año de adopción (`gname`):** primer año en que el municipio supera un umbral de cobertura. En el código el umbral está fijado en **5%**; los municipios que nunca lo superan quedan marcados con `gname = 0` (grupo de control, "nunca tratados"), como exige el paquete `did`. El umbral es una decisión metodológica y debe someterse a prueba de robustez con valores alternativos.
 - **Variables de resultado (GEIH):** participación laboral (binaria), informalidad (binaria, condicional a estar ocupada), horas semanales de trabajo remunerado e ingreso laboral mensual.
 
@@ -64,32 +65,50 @@ El DiD tradicional de efectos fijos de dos vías (TWFE) está sesgado en diseño
 
 ---
 
+## Estructura del repositorio
+
+```
+geih-empleo-formal/
+├── setup.R                 # instalación de paquetes (ejecutar una vez)
+├── Codigo_Evaluacion.R     # Paso 2: variable de tratamiento
+├── README.md
+├── .gitignore
+├── datos/
+│   └── simat/              ← archivos anuales de Educación Formal (no versionados)
+└── salidas/                ← .rds generados por el script (no versionados)
+```
+
+Las rutas se resuelven con el paquete [`here`](https://here.r-lib.org/), que ancla todo a la raíz del proyecto. **No hay rutas absolutas que editar**: el script funciona igual en cualquier máquina siempre que se respete esta estructura.
+
+---
+
 ## Qué hay en cada archivo
+
+### `setup.R`
+
+Instala los paquetes del proyecto. Solo instala los que falten, así que puede ejecutarse sin riesgo de reinstalar lo que ya está.
 
 ### `Codigo_Evaluacion.R`
 
-Construcción de la **variable de tratamiento** a partir del SIMAT. Es el Paso 2 del proyecto y produce los insumos que alimentan la estimación. Va en cuatro bloques:
+Construcción de la **variable de tratamiento** a partir de Educación Formal. Es el Paso 2 del proyecto y produce los insumos que alimentan la estimación. Va en cuatro bloques:
 
-**1. Configuración e insumos**
-Instala y carga los paquetes del proyecto. Define `carpeta`, la ruta local donde están los archivos anuales del SIMAT.
+**1. Rutas y parámetros.** Resuelve las rutas con `here()`, crea `salidas/` si no existe y falla con un mensaje explícito si no encuentra los datos. Define el umbral de adopción.
 
 **2. Lectura y construcción del panel municipal**
-- `leer_archivo()` — lee indistintamente `.dta`, `.txt` y `.csv`, porque el formato del SIMAT cambia entre años, y normaliza los nombres de columna con `janitor::clean_names()`.
-- `construir_tratamiento()` — detecta la columna de matrícula (que también cambia de nombre entre años: `sedealum_cantidad` en unos, la suma de hombres y mujeres en otros), extrae el código de municipio del código de sede, e identifica la jornada única por su **código 6**. Agrega por municipio y calcula `cobertura_ju = 100 × matrícula en jornada única / matrícula total`.
-- Un bucle recorre todos los archivos de la carpeta con `tryCatch()`, de modo que un archivo con estructura inesperada avisa del error sin abortar el proceso completo.
-- Resultado: `tratamiento_panel.rds`, un panel municipio-año, más una tabla de expansión año a año como validación.
 
-**3. Definición de cohortes de adopción**
-Aplica el umbral del 5% para calcular el primer año de adopción de cada municipio y crea `gname` en el formato que espera el paquete `did`. Imprime la distribución de cohortes, que es literalmente la estructura del experimento natural.
+- `leer_archivo()` — lee indistintamente `.dta`, `.txt` y `.csv`, porque el formato cambia entre años, y normaliza los nombres de columna con `janitor::clean_names()`.
+- `construir_tratamiento()` — detecta la columna de matrícula (que también cambia de nombre entre años: `sedealum_cantidad` en unos, la suma de hombres y mujeres en otros), extrae el código de municipio del código de sede, e identifica la jornada única por su código 6. Agrupa por municipio **y año**, y calcula `cobertura_ju = 100 × matrícula en jornada única / matrícula total`.
+- Un bucle recorre todos los archivos de `datos/simat/` con `tryCatch()`, de modo que un archivo con estructura inesperada avisa del error sin abortar el proceso completo.
 
-**4. Agregación departamental**
-Repite la lógica a nivel de departamento (`cod_dpto`, los dos primeros dígitos del código municipal), filtrando códigos inválidos. Produce `tratamiento_depto.rds` como especificación alternativa, útil si el nivel municipal resulta demasiado ruidoso.
+**3. Definición de cohortes de adopción.** Aplica el umbral del 5% para calcular el primer año de adopción de cada municipio y crea `gname` en el formato que espera el paquete `did`. Imprime la distribución de cohortes, que es literalmente la estructura del experimento natural.
 
-**Salidas:** `tratamiento_panel.rds` (municipio-año) y `tratamiento_depto.rds` (departamento-año). Ninguna se versiona.
+**4. Agregación departamental.** Repite la lógica a nivel de departamento (`cod_dpto`, los dos primeros dígitos del código municipal), filtrando códigos inválidos. Produce una especificación alternativa, útil si el nivel municipal resulta demasiado ruidoso.
+
+**Salidas:** `salidas/tratamiento_panel.rds` (municipio-año) y `salidas/tratamiento_depto.rds` (departamento-año).
 
 ### `.gitignore`
 
-Plantilla estándar de R. Excluye `.Rhistory`, `.RData`, `.Rproj.user/` y demás archivos de sesión de RStudio, además de los microdatos.
+Plantilla estándar de R. Excluye `.Rhistory`, `.RData`, `.Rproj.user/` y demás archivos de sesión de RStudio, además de `datos/` y `salidas/`.
 
 ---
 
@@ -97,30 +116,19 @@ Plantilla estándar de R. Excluye `.Rhistory`, `.RData`, `.Rproj.user/` y demás
 
 **Requisitos:** R (≥ 4.1, por el uso del pipe nativo `|>`) y RStudio.
 
-```r
-install.packages(c(
-  "did",        # Callaway-Sant'Anna, estimador principal
-  "tidyverse",  # manipulación de datos
-  "data.table", # lectura rápida de archivos grandes
-  "haven",      # archivos .dta y .sav del DANE
-  "fixest",     # efectos fijos y TWFE, para robustez
-  "janitor",    # limpieza de nombres de columnas
-  "did2s"       # Sun-Abraham, para robustez
-))
-```
+1. **Clonar el repositorio** y abrir el archivo `.Rproj` en RStudio.
+2. **Instalar los paquetes:** ejecutar `setup.R` una sola vez.
+3. **Descargar los datos.** Entrar a `microdatos.dane.gov.co`, sección EDU-MICRODATOS, y descargar **Educación Formal** para los años 2012–2023 (un catálogo por año). Dejar todos los archivos en `datos/simat/`.
+4. **Ejecutar `Codigo_Evaluacion.R`.** Genera los `.rds` en `salidas/`.
 
-**Pasos:**
-
-1. Descargar los archivos anuales del SIMAT desde los datos abiertos del MEN (`MEN_ESTADISTICAS-MATRICULA-POR-MUNICIPIOS`) y dejarlos todos en una misma carpeta.
-2. Abrir `Codigo_Evaluacion.R` y **ajustar la variable `carpeta`** a la ruta de esa carpeta en tu equipo. La ruta que viene en el script es local y no funcionará en otra máquina.
-3. Ejecutar el script. Deja `tratamiento_panel.rds` y `tratamiento_depto.rds` en el directorio de trabajo.
+No hay que editar rutas en el código. Si el script se detiene, el mensaje indica qué falta.
 
 ---
 
 ## Estado del proyecto
 
 - [x] **Paso 1** — Configuración del entorno en R
-- [x] **Paso 2** — Variable de tratamiento desde el SIMAT: panel municipio-año, cohortes de adopción y grupo de control definidos
+- [x] **Paso 2** — Variable de tratamiento desde Educación Formal: panel municipio-año, cohortes de adopción y grupo de control definidos
 - [ ] **Paso 3** — Descarga y unión de módulos de la GEIH
 - [ ] **Paso 4** — Identificación de madres con hijos en edad escolar y construcción de variables de resultado
 - [ ] **Paso 5** — Panel municipio-año con resultados
