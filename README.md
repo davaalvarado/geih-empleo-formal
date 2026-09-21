@@ -1,6 +1,6 @@
 # geih-empleo-formal
 
-**Evaluación de impacto de la Jornada Única Escolar (JUE) sobre el empleo de las madres en Colombia.** Diseño de diferencias en diferencias escalonado (*staggered DiD*) con el estimador de Callaway-Sant'Anna, implementado en R.
+**Evaluación de impacto de la Jornada Única Escolar (JUE) sobre el empleo de las madres en Colombia**, desarrollada en la Especialización en Econometría de la Universidad Externado de Colombia (2026). Diseño de diferencias en diferencias escalonado (*staggered DiD*) con el estimador de Callaway-Sant'Anna, implementado en R.
 
 > El repositorio se llama `geih-empleo-formal` porque la **GEIH** del DANE es la fuente de las variables de resultado del estudio: participación laboral, informalidad, horas trabajadas e ingresos de las madres.
 
@@ -47,7 +47,7 @@ Los microdatos **no se versionan en este repositorio** (son archivos pesados y p
 
 El DiD tradicional de efectos fijos de dos vías (TWFE) está sesgado en diseños escalonados: usa a las unidades ya tratadas como control de las que se tratan después, y con efectos heterogéneos en el tiempo eso puede producir estimaciones con el signo equivocado. Callaway-Sant'Anna estima efectos por cohorte y período —los ATT(g,t)— y luego los agrega con ponderaciones explícitas, evitando ese problema.
 
-**Robustez prevista:** TWFE tradicional (`fixest`) y Sun-Abraham (`did2s`) como comparación.
+**Robustez:** TWFE tradicional (`fixest`) y Sun-Abraham (`did2s`) como comparación.
 
 ### Unidades y variables
 
@@ -125,7 +125,9 @@ No hay que editar rutas en el código. Si el script se detiene, el mensaje indic
 
 ---
 
-## Estado del proyecto
+## Avance del repositorio
+
+La evaluación se estimó en el marco de la especialización. Este repositorio es su versión documentada y reproducible, que se publica paso a paso: las casillas marcadas indican los pasos cuyo código ya está disponible aquí.
 
 - [x] **Paso 1** — Configuración del entorno en R
 - [x] **Paso 2** — Variable de tratamiento desde Educación Formal: panel municipio-año, cohortes de adopción y grupo de control definidos
@@ -136,14 +138,12 @@ No hay que editar rutas en el código. Si el script se detiene, el mensaje indic
 - [ ] **Paso 7** — Efectos dinámicos, gráficos y tablas
 - [ ] **Paso 8** — Canal de cuidado con la ENUT
 
-El repositorio contiene, por ahora, el código del Paso 2. Los resultados aún no están estimados.
-
 ---
 
 ## Limitaciones conocidas
 
 - **Error de medición en el tratamiento.** La cobertura municipal de JUE es una aproximación a la exposición real de cada hogar: no se observa si los hijos de una madre concreta asistían a una sede con jornada única.
-- **Cohortes tardías.** Las cohortes de adopción de 2021 y 2022 son pequeñas y coinciden con el período pos-pandemia, así que sus estimaciones serán más ruidosas y probablemente convenga examinarlas por separado.
+- **Cohortes tardías.** Las cohortes de adopción de 2021 y 2022 son pequeñas y coinciden con el período pos-pandemia, así que sus estimaciones son más ruidosas y conviene examinarlas por separado.
 - **Umbral de adopción.** El 5% es un punto medio defendible, no un valor derivado de la teoría. Requiere prueba de robustez.
 - **La ENUT no es continua**, así que el análisis del mecanismo de cuidado es más grueso que el de empleo.
 
@@ -152,4 +152,5 @@ El repositorio contiene, por ahora, el código del Paso 2. Los resultados aún n
 ## Autor
 
 David Alvarado — [@davaalvarado](https://github.com/davaalvarado)
-Trabajo de especialización en evaluación de impacto de políticas públicas.
+
+Economista (Universidad de la Salle) y Especialista en Econometría (Universidad Externado de Colombia).
