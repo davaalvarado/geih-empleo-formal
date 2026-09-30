@@ -29,7 +29,13 @@ La literatura existente sobre la JUE se ha concentrado casi por completo en el r
 
 **Sobre la fuente del tratamiento.** El SIMAT es el sistema de matrícula del Ministerio de Educación, pero los datos que consume este proyecto llegan por la operación estadística **Educación Formal del DANE**, que publica la matrícula **ya agregada por sede y jornada** en lugar de registro por estudiante. Para calcular cobertura municipal esa presentación es más liviana y directa. Cada año tiene su propio catálogo en el portal (por ejemplo, 2018 corresponde al catálogo 615 y 2023 al 834).
 
-**Período de análisis:** 2012–2023. Los años 2012–2014 son período pre-tratamiento limpio (la JUE no existía) y sirven para verificar tendencias paralelas; 2015 es el año de la Ley 1753 que crea la política; de ahí en adelante se mide la expansión y sus efectos.
+**Período de análisis:** 2014–2022, con siete años observados: 2014, 2015, 2016, 2018, 2019, 2021 y 2022.
+
+- **2014 y 2015 son el período pre-tratamiento.** La jornada única no aparece en los archivos de esos años —solo mañana, tarde, completa, fin de semana y nocturna—, de modo que la cobertura es cero en todo el país. Esa línea base de dos años permite verificar que antes de la política no hubiera ya tendencias divergentes.
+- **2016 es el primer año tratado**, y 2018 y 2019 completan el tramo de expansión.
+- **2021 y 2022** corresponden a la consolidación.
+- **2017 se excluye por un problema de codificación.** Ese año la fuente reporta "Única / Completa" como una sola categoría, mientras que en los demás años aparecen separadas. Incluirlo contaría como jornada única a colegios de jornada completa, que en buena parte son privados y no hacen parte de la política, y la cobertura de 2017 se dispara de forma incoherente frente a la tendencia de los otros años. Con 2016, 2018 y 2019 cubriendo ese mismo tramo, es preferible un panel consistente de siete años que uno de ocho con un año mal medido.
+- **2020 se excluye por la pandemia.**
 
 Los microdatos **no se versionan en este repositorio** (son archivos pesados y públicos). El `.gitignore` excluye `datos/` y `salidas/` junto con los archivos temporales de RStudio.
 
@@ -53,7 +59,7 @@ El DiD tradicional de efectos fijos de dos vías (TWFE) está sesgado en diseño
 
 - **Nivel de tratamiento:** municipio (con agregación alternativa a departamento).
 - **Unidad de análisis de los resultados:** mujeres de 18 a 55 años con al menos un hijo de 6 a 17 años en el hogar, identificadas en la GEIH mediante la variable de parentesco.
-- **Variable de tratamiento:** porcentaje de matrícula oficial en jornada única por municipio y año (`cobertura_ju`). La jornada única se identifica por el **código 6** en la variable de jornada.
+- **Variable de tratamiento:** porcentaje de matrícula oficial en jornada única por municipio y año (`cobertura_ju`). La jornada única se identifica por el **código 6** en la variable de jornada. En 2017 esa categoría viene fusionada con jornada completa, y por eso ese año queda fuera del panel (ver *Período de análisis*).
 - **Año de adopción (`gname`):** primer año en que el municipio supera un umbral de cobertura. En el código el umbral está fijado en **5%**; los municipios que nunca lo superan quedan marcados con `gname = 0` (grupo de control, "nunca tratados"), como exige el paquete `did`. El umbral es una decisión metodológica y debe someterse a prueba de robustez con valores alternativos.
 - **Variables de resultado (GEIH):** participación laboral (binaria), informalidad (binaria, condicional a estar ocupada), horas semanales de trabajo remunerado e ingreso laboral mensual.
 
@@ -74,7 +80,7 @@ geih-empleo-formal/
 ├── README.md
 ├── .gitignore
 ├── datos/
-│   └── simat/              ← archivos anuales de Educación Formal (no versionados)
+│   └── simat/              ← un archivo por año de Educación Formal (no versionados)
 └── salidas/                ← .rds generados por el script (no versionados)
 ```
 
@@ -118,7 +124,7 @@ Plantilla estándar de R. Excluye `.Rhistory`, `.RData`, `.Rproj.user/` y demás
 
 1. **Clonar el repositorio** y abrir el archivo `.Rproj` en RStudio.
 2. **Instalar los paquetes:** ejecutar `setup.R` una sola vez.
-3. **Descargar los datos.** Entrar a `microdatos.dane.gov.co`, sección EDU-MICRODATOS, y descargar **Educación Formal** para los años 2012–2023 (un catálogo por año). Dejar todos los archivos en `datos/simat/`.
+3. **Descargar los datos.** Entrar a `microdatos.dane.gov.co`, sección EDU-MICRODATOS, y descargar **Educación Formal** para 2014, 2015, 2016, 2018, 2019, 2021 y 2022 (un catálogo por año). Dejar los archivos sueltos en `datos/simat/`, con el año al inicio del nombre (por ejemplo `2016_alumnos_por_jornada.csv`). El script no entra a subcarpetas, y el formato cambia entre años: unos vienen en `.dta` y otros en `.csv`.
 4. **Ejecutar `Codigo_Evaluacion.R`.** Genera los `.rds` en `salidas/`.
 
 No hay que editar rutas en el código. Si el script se detiene, el mensaje indica qué falta.
