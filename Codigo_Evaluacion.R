@@ -49,6 +49,13 @@ leer_archivo <- function(ruta) {
   }
 }
 
+# Algunos años traen sede_codigo como número. as.character() lo pasa a notación
+# científica cuando el código termina en ceros ("1.08001e+11"), y entonces la
+# extracción del municipio devuelve basura ("​.0800" en vez de "08001").
+# Esto fuerza siempre la forma de 12 dígitos.
+cod_a_texto <- function(x) {
+  if (is.character(x)) x else sprintf("%.0f", as.numeric(x))
+}
 # ------------------------------------------------------------------------------
 # 2. Construcción del panel municipio-año
 #    La columna de matrícula también cambia de nombre entre años, por eso se
@@ -67,9 +74,15 @@ construir_tratamiento <- function(ruta) {
     stop("No encuentro columna de matrícula")
   }
 
+  codigo_txt <- cod_a_texto(d$sede_codigo)
+  if (!all(nchar(codigo_txt) == 12)) {
+    stop("Códigos de sede con longitud distinta de 12 en ", basename(ruta), ": ",
+         paste(unique(nchar(codigo_txt)), collapse = ", "))
+  }
+  
   d |>
     mutate(
-      cod_mpio       = substr(as.character(sede_codigo), 2, 6),
+      cod_mpio       = substr(codigo_txt, 2, 6),
       jornada_codigo = as.numeric(jornada_codigo),
       anio           = as.integer(periodo_anio)
     ) |>
