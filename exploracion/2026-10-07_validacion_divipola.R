@@ -7,6 +7,8 @@
 #           en 2016 a 2.330 y vuelve a 8.280 en 2019). Queda por revisar si pasa en otros departamentos.
 # Decisión: el 94663 se recodifica a 94343 con referencias/equivalencias_municipios.csv, y
 #           Codigo_Evaluacion.R se detiene si aparece un código que no esté en la DIVIPOLA.
+# Nota:     corrió sobre el panel del commit d31df92, antes de la tabla de equivalencias. Con el
+#           script actual el 94663 ya no aparece en el panel.
 
 library(tidyverse)
 library(here)
@@ -55,4 +57,26 @@ tratamiento_panel |>
   summarise(anios = n(), presentes = paste(anio, collapse = " "), .groups = "drop") |>
   filter(anios < 7) |>
   left_join(divipola |> select(cod_mpio, nom_mpio, dpto), by = "cod_mpio") |>
+  print()
+
+
+# E. ¿Qué es el 94663?
+# Guainía en la DIVIPOLA vigente
+divipola |>
+  filter(cod_dpto == "94") |>
+  select(cod_mpio, nom_mpio, tipo_municipio) |>
+  print()
+
+# Nombre que le da la carátula de 2014
+haven::read_dta(here("datos", "simat_sedes", "2014_caratula_sede.dta")) |>
+  janitor::clean_names() |>
+  filter(codigointernomuni == "94663") |>
+  count(codigointernomuni, muni, depto) |>
+  print()
+
+# Matrícula de cada código de Guainía, año por año
+tratamiento_panel |>
+  filter(substr(cod_mpio, 1, 2) == "94") |>
+  select(cod_mpio, anio, matricula_total) |>
+  pivot_wider(names_from = anio, values_from = matricula_total, names_sort = TRUE) |>
   print()
