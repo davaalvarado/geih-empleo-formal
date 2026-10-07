@@ -7,10 +7,15 @@
 #            año al inicio del nombre (2018_..., 2019_...):
 #              - Alumnos matriculados por jornada     -> datos/simat/
 #              - Carátula única de la sede educativa  -> datos/simat_sedes/
+# Referencias (carpeta referencias/, versionada):
+#            divipola_municipios.csv       lista vigente de municipios (DIVIPOLA)
+#            equivalencias_municipios.csv  códigos que ya no existen en la DIVIPOLA
+#                                          y el código vigente que les corresponde
 # Salidas  : salidas/tratamiento_panel.rds    (municipio-año)
 #            salidas/tratamiento_depto.rds    (departamento-año)
 #            salidas/auditoria_caratula.csv   (control del cruce, una fila por año)
 #            salidas/sedes_sin_municipio.csv  (solo si alguna sede queda sin municipio)
+#            salidas/recodificados.csv        (solo si se aplicó alguna equivalencia)
 #
 # Requisitos: ejecutar setup.R una sola vez para instalar los paquetes.
 # Ejecución : con el botón Source, en una sesión nueva de R. Línea por línea
@@ -31,6 +36,9 @@ carpeta_datos     <- here("datos", "simat")
 carpeta_caratulas <- here("datos", "simat_sedes")
 carpeta_salidas   <- here("salidas")
 
+ruta_divipola      <- here("referencias", "divipola_municipios.csv")
+ruta_equivalencias <- here("referencias", "equivalencias_municipios.csv")
+
 if (!dir.exists(carpeta_datos)) {
   stop("No existe la carpeta datos/simat/. Crearla y dejar allí los archivos ",
        "anuales de Educación Formal del DANE. Ver el README.")
@@ -39,6 +47,16 @@ if (!dir.exists(carpeta_datos)) {
 if (!dir.exists(carpeta_caratulas)) {
   stop("No existe la carpeta datos/simat_sedes/. Crearla y dejar allí la ",
        "carátula de la sede de cada año. Ver el README.")
+}
+
+if (!file.exists(ruta_divipola)) {
+  stop("Falta referencias/divipola_municipios.csv. Se genera una sola vez con ",
+       "exploracion/2026-10-07_validacion_divipola.R")
+}
+
+if (!file.exists(ruta_equivalencias)) {
+  stop("Falta referencias/equivalencias_municipios.csv, la tabla de códigos de ",
+       "municipio que ya no existen en la DIVIPOLA.")
 }
 
 if (!dir.exists(carpeta_salidas)) dir.create(carpeta_salidas, recursive = TRUE)
@@ -78,7 +96,52 @@ anio_de_archivo <- function(rutas) {
 }
 
 # ------------------------------------------------------------------------------
-# 2. Carátula de la sede: de ahí sale el municipio real
+# 2. Tablas de referencia
+#    DIVIPOLA: lista vigente de municipios, bajada de datos.gov.co (gdxc-w37w).
+#    Equivalencias: códigos que traen las carátulas y que ya no existen en la
+#    DIVIPOLA, con el código vigente que les corresponde y la razón del cambio.
+#    Las dos se leen como texto para no perder el cero inicial de Antioquia y
+#    Atlántico. Ver exploracion/2026-10-07_validacion_divipola.R
+# ------------------------------------------------------------------------------
+
+divipola      <- read_csv(ruta_divipola, col_types = cols(.default = "c")) |>
+  clean_names()
+equivalencias <- read_csv(ruta_equivalencias, col_types = cols(.default = "c")) |>
+  clean_names()
+
+if (!"cod_mpio" %in% names(divipola)) {
+  stop("referencias/divipola_municipios.csv no trae la columna cod_mpio")
+}
+
+mpios_validos <- unique(divipola$cod_mpio)
+
+faltan <- setdiff(c("cod_original", "cod_vigente"), names(equivalencias))
+if (length(faltan) > 0) {
+  stop("A referencias/equivalencias_municipios.csv le faltan columnas: ",
+       paste(faltan, collapse = ", "))
+}
+
+if (anyDuplicated(equivalencias$cod_original) > 0) {
+  stop("En referencias/equivalencias_municipios.csv hay códigos originales ",
+       "repetidos: ",
+       paste(unique(equivalencias$cod_original[duplicated(equivalencias$cod_original)]),
+             collapse = ", "))
+}
+
+if (!all(equivalencias$cod_vigente %in% mpios_validos)) {
+  stop("En referencias/equivalencias_municipios.csv hay códigos vigentes que no ",
+       "existen en la DIVIPOLA: ",
+       paste(setdiff(equivalencias$cod_vigente, mpios_validos), collapse = ", "))
+}
+
+# Cambia un código por su equivalente vigente; los demás quedan igual
+aplicar_equivalencias <- function(cod) {
+  i <- match(cod, equivalencias$cod_original)
+  ifelse(is.na(i), cod, equivalencias$cod_vigente[i])
+}
+
+# ------------------------------------------------------------------------------
+# 3. Carátula de la sede: de ahí sale el municipio real
 #    El código de municipio embebido en sede_codigo (posiciones 2 a 6) no
 #    siempre es el municipio donde está la sede: en la carátula de 2018 difiere
 #    en 3.040 de 58.860 sedes, repartidas en 32 departamentos. El municipio
@@ -105,30 +168,34 @@ leer_caratula <- function(ruta, anio_esperado) {
     }
   }
 
+  # cod_caratula es el código tal como viene en la carátula; cod_mpio es el
+  # mismo después de aplicar la tabla de equivalencias
   car <- tibble(
-    sede_codigo = str_trim(cod_a_texto(car$sede_codigo)),
-    cod_mpio    = str_trim(cod_a_texto(car$codigointernomuni)),
-    en_caratula = TRUE
+    sede_codigo  = str_trim(cod_a_texto(car$sede_codigo)),
+    cod_caratula = str_trim(cod_a_texto(car$codigointernomuni)),
+    en_caratula  = TRUE
   ) |>
     filter(!is.na(sede_codigo), sede_codigo != "") |>
-    mutate(cod_mpio = str_pad(na_if(cod_mpio, ""), 5, pad = "0"))
+    mutate(cod_caratula = str_pad(na_if(cod_caratula, ""), 5, pad = "0"),
+           cod_mpio     = aplicar_equivalencias(cod_caratula))
 
   if (anyDuplicated(car$sede_codigo) > 0) {
     stop("La carátula ", basename(ruta), " trae ", sum(duplicated(car$sede_codigo)),
          " sedes repetidas. Unirla así duplicaría la matrícula de esas sedes.")
   }
 
-  mal <- !is.na(car$cod_mpio) & !str_detect(car$cod_mpio, "^[0-9]{5}$")
+  mal <- !is.na(car$cod_caratula) & !str_detect(car$cod_caratula, "^[0-9]{5}$")
   if (any(mal)) {
     stop("La carátula ", basename(ruta), " trae códigos de municipio que no son ",
-         "de 5 dígitos: ", paste(head(unique(car$cod_mpio[mal]), 5), collapse = ", "))
+         "de 5 dígitos: ",
+         paste(head(unique(car$cod_caratula[mal]), 5), collapse = ", "))
   }
 
   car
 }
 
 # ------------------------------------------------------------------------------
-# 3. Construcción del panel municipio-año
+# 4. Construcción del panel municipio-año
 #    La columna de matrícula también cambia de nombre entre años, por eso se
 #    detecta en vez de asumirse. La jornada única corresponde al código 6.
 #    Cada archivo de matrícula se une por sede_codigo con la carátula de su
@@ -171,12 +238,12 @@ construir_tratamiento <- function(ruta, ruta_caratula) {
     ) |>
     left_join(car, by = "sede_codigo")
 
-  # Control del cruce: cuánto queda sin municipio y cuánto cambia de lugar
-  # frente al código embebido en sede_codigo
+  # Control del cruce: cuánto queda sin municipio y cuánto cambia de lugar la
+  # carátula frente al código embebido en sede_codigo
   fila_sin_mpio    <- is.na(d$cod_mpio)
-  fila_reasignada  <- !fila_sin_mpio & d$cod_mpio != d$cod_embebido
+  fila_reasignada  <- !fila_sin_mpio & d$cod_caratula != d$cod_embebido
   fila_cambia_dpto <- !fila_sin_mpio &
-    substr(d$cod_mpio, 1, 2) != substr(d$cod_embebido, 1, 2)
+    substr(d$cod_caratula, 1, 2) != substr(d$cod_embebido, 1, 2)
 
   auditoria <- tibble(
     anio             = anio_archivo,
@@ -200,6 +267,16 @@ construir_tratamiento <- function(ruta, ruta_caratula) {
       .groups   = "drop"
     )
 
+  # Qué movió la tabla de equivalencias en este año
+  recodificados <- d |>
+    filter(!is.na(cod_mpio), cod_mpio != cod_caratula) |>
+    group_by(anio, cod_original = cod_caratula, cod_vigente = cod_mpio) |>
+    summarise(
+      sedes     = n_distinct(sede_codigo),
+      matricula = sum(matricula, na.rm = TRUE),
+      .groups   = "drop"
+    )
+
   panel <- d |>
     filter(!is.na(cod_mpio)) |>
     group_by(cod_mpio, anio) |>
@@ -216,7 +293,8 @@ construir_tratamiento <- function(ruta, ruta_caratula) {
     stop("La matrícula del panel no cuadra con la del archivo ", basename(ruta))
   }
 
-  list(panel = panel, auditoria = auditoria, sedes_sin_mpio = sedes_sin_mpio)
+  list(panel = panel, auditoria = auditoria, sedes_sin_mpio = sedes_sin_mpio,
+       recodificados = recodificados)
 }
 
 patron    <- "\\.(dta|txt|csv)$"
@@ -287,6 +365,24 @@ if (length(errores) > 0) {
 tratamiento_panel <- map(resultados, "panel")          |> bind_rows()
 auditoria         <- map(resultados, "auditoria")      |> bind_rows()
 sedes_sin_mpio    <- map(resultados, "sedes_sin_mpio") |> bind_rows()
+recodificados     <- map(resultados, "recodificados")  |> bind_rows()
+
+# Después de aplicar las equivalencias, todos los municipios del panel deben
+# existir en la DIVIPOLA. Si aparece un código nuevo, el script termina aquí:
+# hay que decidir qué hacer con él y registrarlo en la tabla de equivalencias.
+invalidos <- tratamiento_panel |>
+  filter(!cod_mpio %in% mpios_validos) |>
+  group_by(cod_mpio) |>
+  summarise(anios           = paste(anio, collapse = " "),
+            matricula_media = round(mean(matricula_total)),
+            .groups = "drop")
+
+if (nrow(invalidos) > 0) {
+  stop("Códigos de municipio que no existen en la DIVIPOLA ni tienen equivalencia ",
+       "en referencias/equivalencias_municipios.csv:\n  ",
+       paste0(invalidos$cod_mpio, " (años ", invalidos$anios, "; matrícula media ",
+              invalidos$matricula_media, ")", collapse = "\n  "))
+}
 
 cat("\n=== CONTROL DEL CRUCE CON LA CARÁTULA ===\n")
 print(auditoria, width = Inf)
@@ -301,6 +397,15 @@ if (nrow(sedes_sin_mpio) > 0) {
   file.remove(ruta_sin_mpio)
 }
 
+ruta_recodificados <- here("salidas", "recodificados.csv")
+if (nrow(recodificados) > 0) {
+  cat("\n=== RECODIFICADOS POR LA TABLA DE EQUIVALENCIAS ===\n")
+  print(recodificados)
+  write_csv(recodificados, ruta_recodificados)
+} else if (file.exists(ruta_recodificados)) {
+  file.remove(ruta_recodificados)
+}
+
 cat("\n=== EXPANSIÓN AÑO A AÑO ===\n")
 tratamiento_panel |>
   group_by(anio) |>
@@ -313,7 +418,7 @@ tratamiento_panel |>
   print()
 
 # ------------------------------------------------------------------------------
-# 4. Cohortes de adopción (nivel municipal)
+# 5. Cohortes de adopción (nivel municipal)
 #    gname = primer año en que el municipio supera el umbral.
 #    Los nunca tratados se marcan con 0, como exige el paquete did.
 # ------------------------------------------------------------------------------
@@ -336,13 +441,13 @@ tratamiento_panel |>
 saveRDS(tratamiento_panel, here("salidas", "tratamiento_panel.rds"))
 
 # ------------------------------------------------------------------------------
-# 5. Agregación departamental (especificación alternativa)
-#    Útil si el nivel municipal resulta demasiado ruidoso.
+# 6. Agregación departamental (especificación alternativa)
+#    Útil si el nivel municipal resulta demasiado ruidoso. El departamento son
+#    los dos primeros dígitos del municipio, ya validado contra la DIVIPOLA.
 # ------------------------------------------------------------------------------
 
 tratamiento_depto <- tratamiento_panel |>
   mutate(cod_dpto = substr(cod_mpio, 1, 2)) |>
-  filter(str_detect(cod_dpto, "^[0-9]{2}$")) |>   # solo códigos válidos
   group_by(cod_dpto, anio) |>
   summarise(
     matricula_total = sum(matricula_total, na.rm = TRUE),
@@ -360,7 +465,7 @@ tratamiento_depto <- tratamiento_depto |>
   left_join(anio_adopcion_depto, by = "cod_dpto") |>
   mutate(gname = ifelse(is.na(gname), 0, gname))
 
-cat("\n=== DEPARTAMENTOS VÁLIDOS ===\n")
+cat("\n=== DEPARTAMENTOS ===\n")
 tratamiento_depto |> distinct(cod_dpto) |> nrow() |> print()
 
 cat("\n=== COHORTES DE ADOPCIÓN (departamento) ===\n")
